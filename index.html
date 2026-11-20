@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Forest of Fall Rules</title>
+<style>
+body{margin:0;background:#2b1a10;color:#f3d9b0;font-family:monospace;text-align:center}
+canvas{background:#3b2616;border:3px solid #a85a1c;margin-top:6px;max-width:96vw;touch-action:none}
+#b{padding:4px;font-size:13px}.ok{color:#9be37a}.bad{color:#ff7a6a}
+#pad button{font-size:22px;width:54px;height:46px;margin:2px;background:#a85a1c;color:#fff;border:0;border-radius:8px}
+</style></head><body>
+<script data-bean-store>(function(){if(typeof location!=='undefined'&&location&&location.protocol==='about:'&&typeof document!=='undefined'&&document.addEventListener){document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&e.target.closest('a[href^="#"]');if(!a||a.target==='_blank')return;e.preventDefault();try{location.hash=a.getAttribute('href')}catch(x){}},true)}if(typeof window==='undefined')return;try{window.localStorage.getItem('x');return}catch(e){}var d=Object.assign({},window.__BEAN_SAVED||{});function post(){try{parent.postMessage({type:'bean-store',data:d},'*')}catch(e){}}var ls={getItem:function(k){return Object.prototype.hasOwnProperty.call(d,k)?d[k]:null},setItem:function(k,v){d[k]=String(v);post()},removeItem:function(k){delete d[k];post()},clear:function(){d={};post()},key:function(i){return Object.keys(d)[i]||null}};Object.defineProperty(ls,'length',{get:function(){return Object.keys(d).length}});try{Object.defineProperty(window,'localStorage',{value:ls,configurable:true})}catch(e){}})();</script>
+<div id="b"></div>
+<canvas id="c" width="320" height="240"></canvas>
+<div id="m"></div>
+<div id="pad"><button data-d="U">▲</button><br><button data-d="L">◀</button><button data-d="D">▼</button><button data-d="R">▶</button><br><button data-d="X">restart</button></div>
+<p style="font-size:12px">Arrows move. Push words to make rules. Reach the win thing.</p>
+<script>
+// Cells: '.' empty, 'B' bean, 'L' leaf, 'W' wall(tree), words: b=BEAN l=LEAF i=IS p=PUSH w=WIN n=NOT
+var WORDS={b:'BEAN',l:'LEAF',i:'IS',p:'PUSH',w:'WIN',n:'NOT'};
+var NOUN={b:'BEAN',l:'LEAF'};
+// pure: rules from a grid of strings -> {BEAN:{PUSH:true..},...}; supports X IS Y and X IS NOT Y
+function readRules(g){
+ var out={},H=g.length,W=g[0].length;
+ function add(n,p,neg){out[n]=out[n]||{};out[n][p]=!neg;}
+ function scan(get,len,cnt){
+  for(var a=0;a<cnt;a++)for(var s=0;s<len;s++){
+   var t=[];for(var k=0;k<4;k++)t.push(s+k<len?get(a,s+k):'.');
+   if(NOUN[t[0]]&&t[1]=='i'){
+    if(t[2]=='n'&&(t[3]=='p'||t[3]=='w'))add(NOUN[t[0]],WORDS[t[3]],true);
+    else if(t[2]=='p'||t[2]=='w')add(NOUN[t[0]],WORDS[t[2]],false);
+   }}}
+ scan(function(r,c){return g[r][c]},W,H);
+ scan(function(c,r){return g[r][c]},H,W);
+ return out;
+}
+function has(r,n,p){return !!(r[n]&&r[n][p]);}
+function test(fn){
+ var r=[];
+ var a=fn(['bip..']);r.push(has(a,'BEAN','PUSH'));
+ var b=fn(['lin.w'.replace('w','.'),'.....']);r.push(!has(b,'LEAF','WIN'));
+ var c=fn(['linw.']);r.push(c.LEAF&&c.LEAF.WIN===false);
+ var d=fn(['l....','i....','w....']);r.push(has(d,'LEAF','WIN'));
+ var e=fn(['l.iw.']);r.push(!has(e,'LEAF','WIN'));
+ return r.every(Boolean);
+}
+// broken twin: ignores NOT
+function badRules(g){var o={};var s=g.join('|');return /lin?w/.test(s)?{LEAF:{WIN:true}}:{};}
+var good=test(readRules),twinCaught=!test(badRules);
+document.getElementById('b').innerHTML=(good&&twinCaught)?'<span class=ok>rule check: pass (broken twin rejected)</span>':'<span class=bad>rule check: FAIL</span>';
+var LV=[
+ {t:'1. Make BEAN IS PUSH is not needed: LEAF IS WIN. Push the word WIN into place.',
+  g:['WWWWWWWWWW',
+     'W........W',
+     'Wl.i.....W',
+     'W........W',
+     'W..B..w.LW',
+     'W........W',
+     'WWWWWWWWWW']},
+ {t:'2. Words can be pushed. Rule: BEAN IS PUSH lets you shove leaves!',
+  g:['WWWWWWWWWW',
+     'Wb.i.p...W',
+     'W........W',
+     'Wl.i.w...W',
+     'W.B...L..W',
+     'W........W',
+     'WWWWWWWWWW']},
+ {t:'3. NOT flips a rule. Make LEAF IS NOT WIN, then BEAN IS WIN.',
+  g:['WWWWWWWWWW',
+     'Wl.i.w...W',
+     'W...n....W',
+     'Wb.i.....W',
+     'W..B...L.W',
+     'W........W',
+     'WWWWWWWWWW']}
+];
+var lv=0,grid,won=false,cv=document.getElementById('c'),x=cv.getContext('2d'),T=32;
+function load(){grid=LV[lv].g.map(function(r){return r.split('')});won=false;
+ document.getElementById('m').textContent=LV[lv].t;draw();}
+function pushable(ch,R){if('blipwn'.indexOf(ch)>=0)return true;if(ch=='L'&&has(R,'LEAF','PUSH'))return true;if(ch=='B'&&has(R,'BEAN','PUSH'))return true;return false;}
+function find(ch){for(var r=0;r<grid.length;r++)for(var c=0;c<grid[r].length;c++)if(grid[r][c]==ch)return[r,c];}
+function tryMove(r,c,dr,dc,R){
+ var nr=r+dr,nc=c+dc,ch=grid[nr]&&grid[nr][nc];
+ if(ch===undefined||ch=='W')return false;
+ if(ch!='.'){
+  if(!pushable(ch,R)||!tryMove(nr,nc,dr,dc,R))return false;
+ }
+ grid[nr][nc]=grid[r][c];grid[r][c]='.';return true;
+}
+function winCheck(R){
+ // bean wins when standing where a WIN-thing is: leaf under bean is stored by position memory
+ return false;
+}
+var leaves=[];
+function move(d){
+ if(won)return;
+ if(d=='X'){load();return;}
+ var dr=d=='U'?-1:d=='D'?1:0,dc=d=='L'?-1:d=='R'?1:0;
+ var R=readRules(grid.map(function(r){return r.join('')}));
+ var p=find('B');if(!p)return;
+ // leaf is non-solid for bean when it is WIN (walk onto it)
+ var nr=p[0]+dr,nc=p[1]+dc,tgt=grid[nr]&&grid[nr][nc];
+ if(tgt=='L'&&has(R,'LEAF','WIN')&&!has(R,'LEAF','PUSH')){won=true;grid[nr][nc]='B';grid[p[0]][p[1]]='.';}
+ else if(tgt=='L'&&!has(R,'LEAF','PUSH')&&!has(R,'LEAF','WIN')){/* blocked */}
+ else if(tgt=='L'&&has(R,'LEAF','PUSH')){tryMove(p[0],p[1],dr,dc,R);}
+ else {
+  // bean may also be WIN: stepping next to leaf (level 3): bean on leaf wins
+  tryMove(p[0],p[1],dr,dc,R);
+ }
+ var R2=readRules(grid.map(function(r){return r.join('')}));
+ var q=find('B'),l=find('L');
+ if(!won&&q&&l&&has(R2,'BEAN','WIN')&&Math.abs(q[0]-l[0])+Math.abs(q[1]-l[1])<=0)won=true;
+ draw();
+ if(won){document.getElementById('m').textContent=lv<2?'Leaf reached! Next level...':'All three done. Well raked.';
+  setTimeout(function(){if(lv<2){lv++;load();}},900);}
+}
+function draw(){
+ x.clearRect(0,0,320,240);x.textAlign='center';x.textBaseline='middle';x.font='bold 11px monospace';
+ for(var r=0;r<grid.length;r++)for(var c=0;c<grid[r].length;c++){
+  var ch=grid[r][c],px=c*T,py=r*T+8;if(ch=='.')continue;
+  if(ch=='W'){x.fillStyle='#1d3a1a';x.fillRect(px+2,py+2,T-4,T-4);}
+  else if(ch=='L'){x.fillStyle='#e8751a';x.beginPath();x.ellipse(px+16,py+16,11,8,0.7,0,7);x.fill();}
+  else if(ch=='B'){x.fillStyle='#d9a05b';x.beginPath();x.arc(px+16,py+17,11,0,7);x.fill();x.fillStyle='#2a2622';x.fillRect(px+10,py+12,3,3);x.fillRect(px+19,py+12,3,3);}
+  else{x.fillStyle='#f3d9b0';x.fillRect(px+2,py+4,T-4,T-8);x.fillStyle='#3b2616';x.fillText(WORDS[ch],px+16,py+16);}
+ }
+}
+document.addEventListener('keydown',function(e){var m={ArrowUp:'U',ArrowDown:'D',ArrowLeft:'L',ArrowRight:'R',r:'X'}[e.key];if(m){e.preventDefault();move(m);}});
+document.getElementById('pad').addEventListener('click',function(e){var d=e.target.getAttribute('data-d');if(d)move(d);});
+load();
+</script></body></html>
